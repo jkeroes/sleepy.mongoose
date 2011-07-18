@@ -101,7 +101,6 @@ class MongoHandler:
  
         return obj
 
-
     def _cmd(self, args, out, name = None, db = None, collection = None):
         if name == None:
             name = "default"
@@ -130,6 +129,24 @@ class MongoHandler:
             result['cmd'] = args.getvalue('cmd')
 
         out(json.dumps(result, default=json_util.default))
+
+    def _collections(self, args, out, name = None, db = None, collection = None ):
+        if name == None:
+            name = "default"
+
+        conn = self._get_connection(name)
+        if conn == None:
+            out('{"ok" : 0, "errmsg" : "couldn\'t get connection to mongo"}')
+            return
+        
+        result = {}
+        try:
+            result['collections'] = conn[db].collection_names()
+        except:
+            out('{"ok" : 0, "errmsg" : "Couldn\'t retrieve list of collections in %s" % name"}')
+
+        result['ok'] = 1
+        out( json.dumps(result) )
         
     def _hello(self, args, out, name = None, db = None, collection = None):
         out('{"ok" : 1, "msg" : "Uh, we had a slight weapons malfunction, but ' + 
@@ -204,6 +221,37 @@ class MongoHandler:
         else:
             out('{"ok" : 1}')
         
+    def _distinct(self, args, out, name = None, db = None, collection = None):
+        """
+        query the database.
+        """
+
+        if type(args).__name__ != 'dict':
+            out('{"ok" : 0, "errmsg" : "_find must be a GET request"}')
+            return
+
+        conn = self._get_connection(name)
+        if conn == None:
+            out('{"ok" : 0, "errmsg" : "couldn\'t get connection to mongo"}')
+            return
+
+        if db == None or collection == None:
+            out('{"ok" : 0, "errmsg" : "db and collection must be defined"}')
+            return            
+
+        criteria = {}
+        if 'criteria' in args:
+            criteria = self._get_son(args['criteria'][0], out)
+            if criteria == None:
+                return
+
+        result = {}
+        result = { "ok" : 1, "results" : [] }
+        result[ "results" ] = { criteria['key'] : conn[db][collection].distinct( key=criteria['key'] ) }
+
+        out(json.dumps(result, default=json_util.default))
+            
+
     def _find(self, args, out, name = None, db = None, collection = None):
         """
         query the database.

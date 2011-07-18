@@ -1,3 +1,5 @@
+#!/usr/bin/env python
+#
 # Copyright 2009-2010 10gen, Inc.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -210,7 +212,7 @@ class MongoHTTPRequest(BaseHTTPRequestHandler):
 
         if MongoServer.pem == None:
             try:
-                server = HTTPServer(('', port), MongoHTTPRequest)
+                server = HTTPServer(( 'localhost', port), MongoHTTPRequest)
             except socket.error, (value, message):
                 if value == 98:
                     print "could not bind to localhost:%d... is sleepy.mongoose already running?\n" % port
@@ -238,18 +240,44 @@ class MongoHTTPSRequest(MongoHTTPRequest):
         self.rfile = socket._fileobject(self.request, "rb", self.rbufsize)
         self.wfile = socket._fileobject(self.request, "wb", self.wbufsize)
 
-
 def usage():
-    print "python httpd.py [-x] [-d docroot/dir] [-s certificate.pem] [-m list,of,mongods]"
+    print "python httpd.py [-x] [-f] [-d docroot/dir] [-s certificate.pem] [-m list,of,mongods]"
     print "\t-x|--xorigin\tAllow cross-origin http requests"
+    print "\t-f|         \tfork a process and daemonize"
     print "\t-d|--docroot\tlocation from which to load files"
     print "\t-s|--secure\tlocation of .pem file if ssl is desired"
     print "\t-m|--mongos\tcomma-separated list of mongo servers to connect to"
 
+def daemonize():
+    try: 
+        pid = os.fork() 
+        if pid > 0:
+            # exit first parent
+            sys.exit(0) 
+    except OSError, e: 
+        print >>sys.stderr, "fork #1 failed: %d (%s)" % (e.errno, e.strerror) 
+        sys.exit(1)
+
+    # decouple from parent environment
+    os.chdir("/") 
+    os.setsid() 
+    os.umask(0) 
+
+    # do second fork
+    try: 
+        pid = os.fork() 
+        if pid > 0:
+            # exit from second parent, print eventual PID before
+            print "Daemon PID %d" % pid 
+            sys.exit(0) 
+    except OSError, e: 
+        print >>sys.stderr, "fork #2 failed: %d (%s)" % (e.errno, e.strerror) 
+        sys.exit(1) 
+
 if __name__ == "__main__":
 
     try:
-        opts, args = getopt.getopt(sys.argv[1:], "xd:s:m:", ["xorigin", "docroot=",
+        opts, args = getopt.getopt(sys.argv[1:], "xd:s:m:f", ["xorigin", "docroot=",
             "secure=", "mongos="])
 
         for o, a in opts:
@@ -263,6 +291,8 @@ if __name__ == "__main__":
                 MongoHTTPRequest.mongos = a.split(',')
             if o == "-x" or o == "--xorigin":
                 MongoHTTPRequest.response_headers.append(("Access-Control-Allow-Origin","*"))
+            if o == '-f':
+                 daemonize()
 
     except getopt.GetoptError:
         print "error parsing cmd line args."
